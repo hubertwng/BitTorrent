@@ -1,3 +1,4 @@
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,7 +37,7 @@ public class Bencode {
       case DIC:
         builder.append("d");
         for (Map.Entry entry : ((Map<String, Bencode>) value).entrySet()) {
-          String key = (String)entry.getKey();
+          String key = (String) entry.getKey();
           builder.append(key.length()).append(":").append(key);
           Bencode bencode = (Bencode) entry.getValue();
           builder.append(bencode.encodeToString());
@@ -46,7 +47,7 @@ public class Bencode {
         String str = (String) value;
         return builder.append(str.length()).append(":").append(str).toString();
       case INT:
-        return builder.append("i").append((Long)value).append("e").toString();
+        return builder.append("i").append((Long) value).append("e").toString();
       default:
         throw new RuntimeException("illegal bencode type:" + type);
     }
@@ -57,10 +58,10 @@ public class Bencode {
       case STRING:
         return value.toString();
       case INT:
-        return ((Long)value).toString();
+        return ((Long) value).toString();
       case LIST:
         List<String> ans = new ArrayList<>();
-        for (Object object: (List)value) {
+        for (Object object : (List) value) {
           Bencode bencode = (Bencode) object;
           ans.add(bencode.toSimpleJsonString());
         }
@@ -68,8 +69,8 @@ public class Bencode {
       case DIC:
         Map<String, Object> jsonMap = new HashMap<>();
         for (Map.Entry entry : ((Map<String, Bencode>) value).entrySet()) {
-          String key = (String)entry.getKey();
-          String value = ((Bencode)entry.getValue()).toSimpleJsonString();
+          String key = (String) entry.getKey();
+          String value = ((Bencode) entry.getValue()).toSimpleJsonString();
           jsonMap.put(key, value);
         }
         return gson.toJson(jsonMap);
@@ -79,159 +80,168 @@ public class Bencode {
   }
 
 
+  public static Bencode fromString(String string) {
+    return fromBytes(string.getBytes(StandardCharsets.UTF_8));
+  }
 
-  public static Bencode fromString(String str) {
-    if (str.isEmpty()) {
+  public static Bencode fromBytes(byte[] bytes) {
+    if (bytes == null) {
       throw new RuntimeException("illegal bencode string");
     }
 
-    BencodeType bencodeType = BencodeType.fromCharCode(str.charAt(0));
+    BencodeType bencodeType = BencodeType.fromByte(bytes[0]);
     switch (bencodeType) {
       case LIST:
-        return decodeToList(str);
+        return decodeToList(bytes);
       case DIC:
-        return decodeToDic(str);
+        return decodeToDic(bytes);
       case STRING:
-        return decodeToString(str);
+        return decodeToString(bytes);
       case INT:
-        return decodeToInt(str);
+        return decodeToInt(bytes);
       default:
-        throw new RuntimeException("unsupport bencode type:" + bencodeType);
+        throw new RuntimeException("illegal bencode type:" + bencodeType);
     }
 
   }
 
-  private static Bencode decodeToList(String bencodedString) {
+  private static Bencode decodeToList(byte[] bytes) {
     Bencode bencode = new Bencode();
     bencode.setType(BencodeType.LIST);
 
-    if (bencodedString.isEmpty()) {
+    if (bytes == null) {
       bencode.setValue(new ArrayList<>());
       return bencode;
     }
-    parseNextList(bencodedString, 1, bencode);
+    parseNextList(bytes, 1, bencode);
 
     return bencode;
   }
 
-  private static Bencode decodeToString(String code) {
+  private static Bencode decodeToString(byte[] bytes) {
     Bencode bencode = new Bencode();
     bencode.setType(BencodeType.STRING);
-    parseNextString(code, 1, bencode);
+    parseNextString(bytes, 1, bencode);
     return bencode;
 
   }
 
-  private static Bencode decodeToInt(String code) {
+  private static Bencode decodeToInt(byte[] bytes) {
     Bencode bencode = new Bencode();
     bencode.setType(BencodeType.INT);
-    parseNextInt(code, 1, bencode);
+    parseNextInt(bytes, 1, bencode);
     return bencode;
   }
 
-  private static Bencode decodeToDic(String code) {
+  private static Bencode decodeToDic(byte[] bytes) {
     Bencode bencode = new Bencode();
     bencode.setType(BencodeType.DIC);
-    parseNextDic(code, 1, bencode);
+    parseNextDic(bytes, 1, bencode);
 
     return bencode;
   }
- 
 
-  private static int parseNextString(String bencodedString, int parsingCodeIndex, Bencode bencode) {
-    if (!Character.isDigit(bencodedString.charAt(parsingCodeIndex))) {
+
+  private static int parseNextString(byte[] bytes, int parsingCodeIndex, Bencode bencode) {
+    if (!Character.isDigit(bytes[parsingCodeIndex])) {
       throw new RuntimeException("illegal string type bencode");
     }
-    int lengStartCodeIndex = parsingCodeIndex;
-    int lengthEndCodeIndex = lengStartCodeIndex + 1;
-    while (':' != bencodedString.charAt(lengthEndCodeIndex) && lengthEndCodeIndex < bencodedString.length()) {
+    int lengthStartCodeIndex = parsingCodeIndex;
+    int lengthEndCodeIndex = lengthStartCodeIndex + 1;
+    while (':' != bytes[lengthEndCodeIndex] && lengthEndCodeIndex < bytes.length) {
       lengthEndCodeIndex++;
     }
-    int length = Integer.parseInt(bencodedString.substring(lengStartCodeIndex, lengthEndCodeIndex));
+    byte[] lengthBytes = new byte[lengthEndCodeIndex - lengthStartCodeIndex];
+    System.arraycopy(bytes, lengthStartCodeIndex, lengthBytes, 0, lengthEndCodeIndex - lengthStartCodeIndex);
+    int length = Integer.parseInt(new String(lengthBytes, StandardCharsets.UTF_8));
     int stringStartCodeIndex = lengthEndCodeIndex + 1;
-    bencode.setValue(bencodedString.substring(stringStartCodeIndex, stringStartCodeIndex + length));
+    byte[] valueBytes = new byte[length];
+    System.arraycopy(bytes, stringStartCodeIndex, valueBytes, 0, length);
+    bencode.setValue(new String(valueBytes, StandardCharsets.UTF_8));
     return stringStartCodeIndex + length;
   }
 
-  private static int parseNextInt(String bencodedString, int parsingCodeIndex, Bencode bencode) {
-    if ('i' != bencodedString.charAt(parsingCodeIndex)) {
+  private static int parseNextInt(byte[] bytes, int parsingCodeIndex, Bencode bencode) {
+    if ('i' != bytes[parsingCodeIndex]) {
       throw new RuntimeException("illegal int type bencode");
     }
     int intStartCodeIndex = parsingCodeIndex + 1;
     int intEndCodeIndex = intStartCodeIndex + 1;
-    while ('e' != bencodedString.charAt(intEndCodeIndex) && intEndCodeIndex < bencodedString.length()) {
+    while ('e' != bytes[intEndCodeIndex] && intEndCodeIndex < bytes.length) {
       intEndCodeIndex++;
     }
-    bencode.setValue(Long.parseLong(bencodedString.substring(intStartCodeIndex, intEndCodeIndex)));
+    byte[] numBytes = new byte[intEndCodeIndex - intStartCodeIndex];
+    System.arraycopy(bytes, intStartCodeIndex, numBytes, 0, intEndCodeIndex - intStartCodeIndex);
+    bencode.setValue(Long.parseLong(new String(numBytes, StandardCharsets.UTF_8)));
     return intEndCodeIndex + 1;
   }
 
-  private static int parseNextList(String bencodedString, int parsingCodeIndex, Bencode bencode) {
-    List<Bencode> primitiveBencodes = new ArrayList<>();
-    bencode.setValue(primitiveBencodes);
-    while ('e' != bencodedString.charAt(parsingCodeIndex) && parsingCodeIndex < bencodedString.length()) {
-      BencodeType type = BencodeType.fromCharCode(bencodedString.charAt(parsingCodeIndex));
+  private static int parseNextList(byte[] bytes, int parsingCodeIndex, Bencode bencode) {
+    List<Bencode> bencodeList = new ArrayList<>();
+    bencode.setValue(bencodeList);
+    while ('e' != bytes[parsingCodeIndex] && parsingCodeIndex < bytes.length) {
+      BencodeType type = BencodeType.fromByte(bytes[parsingCodeIndex]);
       Bencode nextBencode = new Bencode();
       nextBencode.setType(type);
       switch (type) {
         case INT:
-          parsingCodeIndex = parseNextInt(bencodedString, parsingCodeIndex, nextBencode);
+          parsingCodeIndex = parseNextInt(bytes, parsingCodeIndex, nextBencode);
           break;
         case STRING:
-          parsingCodeIndex = parseNextString(bencodedString, parsingCodeIndex, nextBencode);
+          parsingCodeIndex = parseNextString(bytes, parsingCodeIndex, nextBencode);
           break;
         case LIST:
-          parsingCodeIndex = parseNextList(bencodedString, parsingCodeIndex + 1, nextBencode);
+          parsingCodeIndex = parseNextList(bytes, parsingCodeIndex + 1, nextBencode);
           break;
         case DIC:
-          parsingCodeIndex = parseNextInt(bencodedString, parsingCodeIndex + 1, nextBencode);
+          parsingCodeIndex = parseNextDic(bytes, parsingCodeIndex + 1, nextBencode);
           break;
         default:
-          throw new RuntimeException("unspport type in list bencode type");
+          throw new RuntimeException("illegal type in list bencode type");
 
       }
-      primitiveBencodes.add(nextBencode);
+      bencodeList.add(nextBencode);
     }
     return parsingCodeIndex + 1;
   }
 
-  private static int parseNextDic(String bencodedString, int parsingCodeIndex, Bencode dicBencode) {
+  private static int parseNextDic(byte[] bytes, int parsingCodeIndex, Bencode dicBencode) {
     Map<String, Bencode> dic = new HashMap<>();
     dicBencode.setValue(dic);
-    while ('e' != bencodedString.charAt(parsingCodeIndex) && parsingCodeIndex < bencodedString.length()) {
-      BencodeType keyType = BencodeType.fromCharCode(bencodedString.charAt(parsingCodeIndex));
+    while ('e' != bytes[parsingCodeIndex] && parsingCodeIndex < bytes.length) {
+      BencodeType keyType = BencodeType.fromByte(bytes[parsingCodeIndex]);
       if (!BencodeType.STRING.equals(keyType)) {
         throw new RuntimeException("collection dic bencode's key must only string but is " + keyType);
       }
       Bencode key = new Bencode();
       key.setType(keyType);
-      parsingCodeIndex = parseNextString(bencodedString, parsingCodeIndex, key);
+      parsingCodeIndex = parseNextString(bytes, parsingCodeIndex, key);
 
-      if (parsingCodeIndex >= bencodedString.length()) {
+      if (parsingCodeIndex >= bytes.length) {
         throw new RuntimeException("collection dic bencode's must have a value");
       }
-      BencodeType valueType = BencodeType.fromCharCode(bencodedString.charAt(parsingCodeIndex));
+      BencodeType valueType = BencodeType.fromByte(bytes[parsingCodeIndex]);
       Bencode valueBencode = new Bencode();
       valueBencode.setType(valueType);
       switch (valueType) {
         case STRING:
-          parsingCodeIndex = parseNextString(bencodedString, parsingCodeIndex, valueBencode);
+          parsingCodeIndex = parseNextString(bytes, parsingCodeIndex, valueBencode);
           break;
         case INT:
-          parsingCodeIndex = parseNextInt(bencodedString, parsingCodeIndex, valueBencode);
+          parsingCodeIndex = parseNextInt(bytes, parsingCodeIndex, valueBencode);
           break;
         case LIST:
-          parsingCodeIndex = parseNextList(bencodedString, parsingCodeIndex + 1, valueBencode);
+          parsingCodeIndex = parseNextList(bytes, parsingCodeIndex + 1, valueBencode);
           break;
         case DIC:
-          parsingCodeIndex = parseNextDic(bencodedString, parsingCodeIndex + 1, valueBencode);
+          parsingCodeIndex = parseNextDic(bytes, parsingCodeIndex + 1, valueBencode);
           break;
         default:
-          throw new RuntimeException("unspport type in list bencode type");       
+          throw new RuntimeException("illegal type in list bencode type");
       }
       dic.put(key.getString(), valueBencode);
     }
-    
-  return parsingCodeIndex + 1;
+
+    return parsingCodeIndex + 1;
   }
 }

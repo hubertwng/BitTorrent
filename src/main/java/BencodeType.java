@@ -6,12 +6,9 @@ public enum BencodeType {
     DIC;
 
 
-
-
-
-    public static BencodeType fromCharCode(char ch) {
+    public static BencodeType fromByte(byte ch) {
         if (Character.isDigit(ch)) {
-            return  STRING;
+            return STRING;
         } else if ('i' == ch) {
             return INT;
 
@@ -22,5 +19,5 @@ public enum BencodeType {
         } else {
             throw new RuntimeException("unknown char code" + Character.toString(ch));
         }
-    } 
+    }
 }
